@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Check, Mail, MessageCircle, Plus, Trash2, Pencil, Sparkles, Copy, CheckCircle2, LogOut } from 'lucide-react';
+import { Check, Mail, MessageCircle, Plus, Trash2, Pencil, Sparkles, Copy, CheckCircle2, LogOut, CalendarPlus, Tag } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 const STYLE = `
@@ -381,7 +381,33 @@ const STYLE = `
 }
 .mbt-auth-msg.error { background: var(--rose-soft); color: var(--rose); }
 .mbt-auth-msg.success { background: var(--sage-soft); color: var(--sage); }
+
+/* Price list */
+.mbt-price-list { display: flex; flex-direction: column; gap: 1px; background: var(--line); border-radius: 5px; overflow: hidden; border: 1px solid var(--line); }
+.mbt-price-row { background: var(--paper); padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.mbt-price-service { font-family: 'Newsreader', serif; font-style: italic; font-size: 16px; }
+.mbt-price-desc { font-family: 'Inter', sans-serif; font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+.mbt-price-amount { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: var(--rose); white-space: nowrap; }
+.mbt-price-row-admin { display: flex; align-items: center; gap: 10px; }
 `;
+
+function gcalLink(b) {
+  if (!b.date) return null;
+  const start = new Date(`${b.date}T${b.time || '12:00'}:00`);
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  const fmt = (d) =>
+    d.getFullYear().toString().padStart(4, '0') +
+    String(d.getMonth() + 1).padStart(2, '0') +
+    String(d.getDate()).padStart(2, '0') +
+    'T' +
+    String(d.getHours()).padStart(2, '0') +
+    String(d.getMinutes()).padStart(2, '0') +
+    '00';
+  const dates = `${fmt(start)}/${fmt(end)}`;
+  const text = encodeURIComponent(`${b.name}${b.service ? ' — ' + b.service : ''}`);
+  const details = encodeURIComponent(b.notes || '');
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${dates}&details=${details}`;
+}
 
 function formatDatePretty(dateStr) {
   if (!dateStr) return '';
@@ -422,7 +448,7 @@ function AuthScreen() {
     <div className="mbt-app">
       <style>{STYLE}</style>
       <div className="mbt-auth-wrap">
-        <div className="mbt-eyebrow" style={{ textAlign: 'center' }}>Model Bookings</div>
+        <div className="mbt-eyebrow" style={{ textAlign: 'center' }}>Booking Portal</div>
         <div className="mbt-title" style={{ textAlign: 'center', marginBottom: 20 }}>Sign in</div>
         <div className="mbt-auth-card">
           <div className="mbt-auth-toggle">
@@ -463,15 +489,18 @@ function ClientView({ email, onSignOut }) {
   const [error, setError] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [ideas, setIdeas] = useState([]);
+  const [prices, setPrices] = useState([]);
 
   useEffect(() => {
     (async () => {
       const { data: bData, error: bErr } = await supabase.from('bookings').select('*').order('date', { ascending: true });
       const { data: iData, error: iErr } = await supabase.from('content_ideas').select('*').order('created_at', { ascending: true });
+      const { data: pData } = await supabase.from('price_list').select('*').order('sort_order', { ascending: true });
       if (bErr || iErr) setError((bErr || iErr).message);
       else {
         setBookings(bData || []);
         setIdeas(iData || []);
+        setPrices(pData || []);
       }
       setLoading(false);
     })();
@@ -483,8 +512,8 @@ function ClientView({ email, onSignOut }) {
       <div className="mbt-wrap">
         <div className="mbt-header-row">
           <div>
-            <div className="mbt-eyebrow">Your Appointment</div>
-            <div className="mbt-title">Hi there</div>
+            <div className="mbt-eyebrow">Booking Portal</div>
+            <div className="mbt-title">Muses by Muz</div>
             <div className="mbt-sub">Signed in as {email}</div>
           </div>
           <button className="mbt-signout" onClick={onSignOut}><LogOut size={12} /> Sign out</button>
@@ -494,28 +523,33 @@ function ClientView({ email, onSignOut }) {
           <div className="mbt-loading">Loading…</div>
         ) : error ? (
           <div className="mbt-error">Couldn't load your info: {error}</div>
-        ) : bookings.length === 0 ? (
-          <div className="mbt-empty">No booking found under this email yet — check with your makeup artist that the email matches.</div>
         ) : (
           <>
-            {bookings.map((b, idx) => (
-              <div key={b.id} className={`mbt-card ${b.done ? 'done' : ''}`}>
-                {b.done && <div className="mbt-stamp">Wrapped</div>}
-                <div className={`mbt-check readonly ${b.done ? 'done' : ''}`}>
-                  {b.done && <Check size={14} color="#FCFAF6" strokeWidth={3} />}
-                </div>
-                <div className="mbt-card-body">
-                  <div className="mbt-index">N°{String(idx + 1).padStart(2, '0')}</div>
-                  <div className="mbt-name">{b.name}</div>
-                  <div className="mbt-meta">
-                    {b.date && <span>{formatDatePretty(b.date)}</span>}
-                    {b.time && <span>{b.time}</span>}
-                    {b.service && <span>{b.service}</span>}
+            {bookings.length === 0 ? (
+              <div className="mbt-empty">No booking found under this email yet — check with your makeup artist that the email matches.</div>
+            ) : (
+              <>
+                <div className="mbt-form-title" style={{ marginBottom: 10 }}>Your Appointment</div>
+                {bookings.map((b, idx) => (
+                  <div key={b.id} className={`mbt-card ${b.done ? 'done' : ''}`}>
+                    {b.done && <div className="mbt-stamp">Wrapped</div>}
+                    <div className={`mbt-check readonly ${b.done ? 'done' : ''}`}>
+                      {b.done && <Check size={14} color="#FCFAF6" strokeWidth={3} />}
+                    </div>
+                    <div className="mbt-card-body">
+                      <div className="mbt-index">N°{String(idx + 1).padStart(2, '0')}</div>
+                      <div className="mbt-name">{b.name}</div>
+                      <div className="mbt-meta">
+                        {b.date && <span>{formatDatePretty(b.date)}</span>}
+                        {b.time && <span>{b.time}</span>}
+                        {b.service && <span>{b.service}</span>}
+                      </div>
+                      {b.notes && <div className="mbt-notes">{b.notes}</div>}
+                    </div>
                   </div>
-                  {b.notes && <div className="mbt-notes">{b.notes}</div>}
-                </div>
-              </div>
-            ))}
+                ))}
+              </>
+            )}
 
             {ideas.length > 0 && (
               <>
@@ -525,6 +559,23 @@ function ClientView({ email, onSignOut }) {
                     <div key={i.id} className="mbt-idea-card">
                       <div className="mbt-idea-title"><Sparkles size={15} color="#A85D5D" />{i.title}</div>
                       {i.description && <div className="mbt-idea-desc">{i.description}</div>}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {prices.length > 0 && (
+              <>
+                <div className="mbt-form-title" style={{ marginTop: 24, marginBottom: 10 }}>Pricing</div>
+                <div className="mbt-price-list">
+                  {prices.map((p) => (
+                    <div key={p.id} className="mbt-price-row">
+                      <div>
+                        <div className="mbt-price-service">{p.service}</div>
+                        {p.description && <div className="mbt-price-desc">{p.description}</div>}
+                      </div>
+                      {p.price != null && <div className="mbt-price-amount">${Number(p.price).toFixed(0)}</div>}
                     </div>
                   ))}
                 </div>
@@ -540,6 +591,7 @@ function ClientView({ email, onSignOut }) {
 // ---------- Admin (full) view ----------
 const emptyBookingForm = { name: '', email: '', phone: '', date: '', time: '', service: '', notes: '' };
 const emptyIdeaForm = { title: '', description: '', bookingId: '' };
+const emptyPriceForm = { service: '', price: '', description: '' };
 
 function AdminView({ onSignOut }) {
   const [loading, setLoading] = useState(true);
@@ -556,6 +608,11 @@ function AdminView({ onSignOut }) {
   const [showIdeaForm, setShowIdeaForm] = useState(false);
   const [ideaForm, setIdeaForm] = useState(emptyIdeaForm);
 
+  const [prices, setPrices] = useState([]);
+  const [showPriceForm, setShowPriceForm] = useState(false);
+  const [editingPriceId, setEditingPriceId] = useState(null);
+  const [priceForm, setPriceForm] = useState(emptyPriceForm);
+
   useEffect(() => {
     loadAll();
   }, []);
@@ -563,15 +620,17 @@ function AdminView({ onSignOut }) {
   async function loadAll() {
     setLoading(true);
     setLoadError(null);
-    const [bRes, iRes] = await Promise.all([
+    const [bRes, iRes, pRes] = await Promise.all([
       supabase.from('bookings').select('*').order('date', { ascending: true }),
       supabase.from('content_ideas').select('*').order('created_at', { ascending: true }),
+      supabase.from('price_list').select('*').order('sort_order', { ascending: true }),
     ]);
-    if (bRes.error || iRes.error) {
-      setLoadError((bRes.error || iRes.error).message);
+    if (bRes.error || iRes.error || pRes.error) {
+      setLoadError((bRes.error || iRes.error || pRes.error).message);
     } else {
       setBookings(bRes.data.map(rowToBooking));
       setIdeas(iRes.data.map(rowToIdea));
+      setPrices(pRes.data.map(rowToPrice));
     }
     setLoading(false);
   }
@@ -581,6 +640,45 @@ function AdminView({ onSignOut }) {
   }
   function rowToIdea(r) {
     return { id: r.id, title: r.title, description: r.description || '', bookingId: r.booking_id || '' };
+  }
+  function rowToPrice(r) {
+    return { id: r.id, service: r.service, price: r.price, description: r.description || '', sortOrder: r.sort_order || 0 };
+  }
+
+  function openNewPriceForm() {
+    setPriceForm(emptyPriceForm);
+    setEditingPriceId(null);
+    setShowPriceForm(true);
+  }
+
+  function openEditPriceForm(p) {
+    setPriceForm({ service: p.service, price: p.price != null ? String(p.price) : '', description: p.description });
+    setEditingPriceId(p.id);
+    setShowPriceForm(true);
+  }
+
+  async function savePriceForm() {
+    if (!priceForm.service.trim()) return;
+    const payload = {
+      service: priceForm.service,
+      price: priceForm.price === '' ? null : Number(priceForm.price),
+      description: priceForm.description,
+    };
+    if (editingPriceId) {
+      const { error } = await supabase.from('price_list').update(payload).eq('id', editingPriceId);
+      if (!error) setPrices(prices.map((p) => (p.id === editingPriceId ? { ...p, ...payload } : p)));
+    } else {
+      const { data, error } = await supabase.from('price_list').insert({ ...payload, sort_order: prices.length }).select().single();
+      if (!error) setPrices([...prices, rowToPrice(data)]);
+    }
+    setShowPriceForm(false);
+    setPriceForm(emptyPriceForm);
+    setEditingPriceId(null);
+  }
+
+  async function deletePrice(id) {
+    setPrices(prices.filter((p) => p.id !== id));
+    await supabase.from('price_list').delete().eq('id', id);
   }
 
   function openNewBookingForm() {
@@ -669,16 +767,14 @@ function AdminView({ onSignOut }) {
     return (a.date + a.time).localeCompare(b.date + b.time);
   });
 
-  const monthLabel = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-
   return (
     <div className="mbt-app">
       <style>{STYLE}</style>
       <div className="mbt-wrap">
         <div className="mbt-header-row">
           <div>
-            <div className="mbt-eyebrow">Call Sheet — {monthLabel}</div>
-            <div className="mbt-title">Model Bookings</div>
+            <div className="mbt-eyebrow">Booking Portal</div>
+            <div className="mbt-title">Muses by Muz</div>
             <div className="mbt-sub">{bookings.filter((b) => !b.done).length} upcoming · {bookings.filter((b) => b.done).length} wrapped</div>
           </div>
           <button className="mbt-signout" onClick={onSignOut}><LogOut size={12} /> Sign out</button>
@@ -687,6 +783,7 @@ function AdminView({ onSignOut }) {
         <div className="mbt-tabs">
           <button className={`mbt-tab ${tab === 'bookings' ? 'active' : ''}`} onClick={() => setTab('bookings')}>Bookings</button>
           <button className={`mbt-tab ${tab === 'ideas' ? 'active' : ''}`} onClick={() => setTab('ideas')}>Content Ideas</button>
+          <button className={`mbt-tab ${tab === 'pricing' ? 'active' : ''}`} onClick={() => setTab('pricing')}>Pricing</button>
         </div>
 
         {loading ? (
@@ -780,6 +877,11 @@ function AdminView({ onSignOut }) {
                           <MessageCircle size={12} /> Text
                         </a>
                       )}
+                      {b.date && (
+                        <a className="mbt-iconbtn" href={gcalLink(b)} target="_blank" rel="noopener noreferrer">
+                          <CalendarPlus size={12} /> Add to Calendar
+                        </a>
+                      )}
                       <button className="mbt-iconbtn" onClick={() => openEditBookingForm(b)}>
                         <Pencil size={12} /> Edit
                       </button>
@@ -792,7 +894,7 @@ function AdminView({ onSignOut }) {
               ))
             )}
           </div>
-        ) : (
+        ) : tab === 'ideas' ? (
           <div>
             {!showIdeaForm && (
               <button className="mbt-addbtn" onClick={openIdeaForm} style={{ marginBottom: 18 }}>
@@ -850,6 +952,60 @@ function AdminView({ onSignOut }) {
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div>
+            {!showPriceForm && (
+              <button className="mbt-addbtn" onClick={openNewPriceForm} style={{ marginBottom: 18 }}>
+                <Plus size={14} /> Add price
+              </button>
+            )}
+
+            {showPriceForm && (
+              <div className="mbt-form">
+                <div className="mbt-form-title">{editingPriceId ? 'Edit price' : 'New price'}</div>
+                <div className="mbt-field-row">
+                  <div className="mbt-field">
+                    <label>Service</label>
+                    <input value={priceForm.service} onChange={(e) => setPriceForm({ ...priceForm, service: e.target.value })} placeholder="e.g. Soft Glam" />
+                  </div>
+                  <div className="mbt-field">
+                    <label>Price ($)</label>
+                    <input type="number" value={priceForm.price} onChange={(e) => setPriceForm({ ...priceForm, price: e.target.value })} placeholder="150" />
+                  </div>
+                </div>
+                <div className="mbt-field-row">
+                  <div className="mbt-field">
+                    <label>Description (optional)</label>
+                    <input value={priceForm.description} onChange={(e) => setPriceForm({ ...priceForm, description: e.target.value })} placeholder="what's included" />
+                  </div>
+                </div>
+                <div className="mbt-form-actions">
+                  <button className="mbt-btn-primary" onClick={savePriceForm}>Save</button>
+                  <button className="mbt-btn-ghost" onClick={() => { setShowPriceForm(false); setEditingPriceId(null); }}>Cancel</button>
+                </div>
+              </div>
+            )}
+
+            {prices.length === 0 ? (
+              <div className="mbt-empty">No prices added yet — this list is what clients will see when they log in.</div>
+            ) : (
+              <div className="mbt-price-list">
+                {prices.map((p) => (
+                  <div key={p.id} className="mbt-price-row">
+                    <div>
+                      <div className="mbt-price-service">{p.service}</div>
+                      {p.description && <div className="mbt-price-desc">{p.description}</div>}
+                    </div>
+                    <div className="mbt-price-row-admin">
+                      {p.price != null && <div className="mbt-price-amount">${Number(p.price).toFixed(0)}</div>}
+                      <button className="mbt-trash" onClick={() => openEditPriceForm(p)}><Pencil size={14} /></button>
+                      <button className="mbt-trash" onClick={() => deletePrice(p.id)}><Trash2 size={14} /></button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

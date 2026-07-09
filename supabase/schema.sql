@@ -31,9 +31,20 @@ create table if not exists admins (
   email text primary key
 );
 
+-- Price list shown to clients on their portal page. Editable only by you (the admin).
+create table if not exists price_list (
+  id uuid primary key default gen_random_uuid(),
+  service text not null,
+  price numeric,
+  description text,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
 alter table bookings enable row level security;
 alter table content_ideas enable row level security;
 alter table admins enable row level security;
+alter table price_list enable row level security;
 
 -- Helper: checks if the currently logged-in user's email is in the admins table
 create or replace function is_admin() returns boolean
@@ -72,6 +83,13 @@ create policy "read own ideas or admin" on content_ideas for select
 create policy "admin insert ideas" on content_ideas for insert with check (is_admin());
 create policy "admin update ideas" on content_ideas for update using (is_admin());
 create policy "admin delete ideas" on content_ideas for delete using (is_admin());
+
+-- Price list: anyone logged in (admin or any client) can view it. Only you can change it.
+drop policy if exists "any authenticated user can read prices" on price_list;
+create policy "any authenticated user can read prices" on price_list for select using (auth.uid() is not null);
+create policy "admin insert prices" on price_list for insert with check (is_admin());
+create policy "admin update prices" on price_list for update using (is_admin());
+create policy "admin delete prices" on price_list for delete using (is_admin());
 
 -- LAST STEP (do this after you've created your own login in the app or Supabase dashboard):
 -- insert into admins (email) values ('your-real-email@example.com');
