@@ -613,6 +613,8 @@ function AdminView({ onSignOut }) {
   const [editingPriceId, setEditingPriceId] = useState(null);
   const [priceForm, setPriceForm] = useState(emptyPriceForm);
 
+  const [inquiries, setInquiries] = useState([]);
+
   useEffect(() => {
     loadAll();
   }, []);
@@ -620,19 +622,59 @@ function AdminView({ onSignOut }) {
   async function loadAll() {
     setLoading(true);
     setLoadError(null);
-    const [bRes, iRes, pRes] = await Promise.all([
+    const [bRes, iRes, pRes, qRes] = await Promise.all([
       supabase.from('bookings').select('*').order('date', { ascending: true }),
       supabase.from('content_ideas').select('*').order('created_at', { ascending: true }),
       supabase.from('price_list').select('*').order('sort_order', { ascending: true }),
+      supabase.from('inquiries').select('*').order('created_at', { ascending: false }),
     ]);
-    if (bRes.error || iRes.error || pRes.error) {
-      setLoadError((bRes.error || iRes.error || pRes.error).message);
+    if (bRes.error || iRes.error || pRes.error || qRes.error) {
+      setLoadError((bRes.error || iRes.error || pRes.error || qRes.error).message);
     } else {
       setBookings(bRes.data.map(rowToBooking));
       setIdeas(iRes.data.map(rowToIdea));
       setPrices(pRes.data.map(rowToPrice));
+      setInquiries(qRes.data.map(rowToInquiry));
     }
     setLoading(false);
+  }
+
+  function rowToInquiry(r) {
+    return {
+      id: r.id,
+      name: r.name,
+      email: r.email || '',
+      phone: r.phone || '',
+      preferredDate: r.preferred_date || '',
+      service: r.service || '',
+      message: r.message || '',
+      status: r.status || 'new',
+    };
+  }
+
+  async function setInquiryStatus(id, status) {
+    setInquiries(inquiries.map((q) => (q.id === id ? { ...q, status } : q)));
+    await supabase.from('inquiries').update({ status }).eq('id', id);
+  }
+
+  async function deleteInquiry(id) {
+    setInquiries(inquiries.filter((q) => q.id !== id));
+    await supabase.from('inquiries').delete().eq('id', id);
+  }
+
+  function useInquiryForBooking(q) {
+    setBookingForm({
+      name: q.name,
+      email: q.email,
+      phone: q.phone,
+      date: q.preferredDate,
+      time: '',
+      service: q.service,
+      notes: q.message,
+    });
+    setEditingBookingId(null);
+    setTab('bookings');
+    setShowBookingForm(true);
   }
 
   function rowToBooking(r) {
@@ -782,6 +824,9 @@ function AdminView({ onSignOut }) {
 
         <div className="mbt-tabs">
           <button className={`mbt-tab ${tab === 'bookings' ? 'active' : ''}`} onClick={() => setTab('bookings')}>Bookings</button>
+          <button className={`mbt-tab ${tab === 'inquiries' ? 'active' : ''}`} onClick={() => setTab('inquiries')}>
+            Inquiries{inquiries.filter((q) => q.status === 'new').length > 0 ? ` (${inquiries.filter((q) => q.status === 'new').length})` : ''}
+          </button>
           <button className={`mbt-tab ${tab === 'ideas' ? 'active' : ''}`} onClick={() => setTab('ideas')}>Content Ideas</button>
           <button className={`mbt-tab ${tab === 'pricing' ? 'active' : ''}`} onClick={() => setTab('pricing')}>Pricing</button>
         </div>
@@ -886,6 +931,46 @@ function AdminView({ onSignOut }) {
                         <Pencil size={12} /> Edit
                       </button>
                       <button className="mbt-iconbtn" onClick={() => deleteBooking(b.id)}>
+                        <Trash2 size={12} /> Remove
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        ) : tab === 'inquiries' ? (
+          <div>
+            {inquiries.length === 0 ? (
+              <div className="mbt-empty">No inquiries yet — once your bio link form is live, submissions will show up here.</div>
+            ) : (
+              inquiries.map((q) => (
+                <div key={q.id} className="mbt-card">
+                  <div className="mbt-card-body">
+                    <div className="mbt-index">{q.status === 'new' ? 'NEW' : q.status.toUpperCase()}</div>
+                    <div className="mbt-name">{q.name}</div>
+                    <div className="mbt-meta">
+                      {q.preferredDate && <span>{formatDatePretty(q.preferredDate)}</span>}
+                      {q.service && <span>{q.service}</span>}
+                      {q.email && <span>{q.email}</span>}
+                      {q.phone && <span>{q.phone}</span>}
+                    </div>
+                    {q.message && <div className="mbt-notes">{q.message}</div>}
+                    <div className="mbt-actions">
+                      <button className="mbt-iconbtn" onClick={() => useInquiryForBooking(q)}>
+                        <Plus size={12} /> Use for new booking
+                      </button>
+                      {q.email && (
+                        <a className="mbt-iconbtn" href={`mailto:${q.email}?subject=${encodeURIComponent('Re: your booking inquiry')}`}>
+                          <Mail size={12} /> Reply
+                        </a>
+                      )}
+                      {q.status !== 'contacted' && (
+                        <button className="mbt-iconbtn" onClick={() => setInquiryStatus(q.id, 'contacted')}>
+                          <CheckCircle2 size={12} /> Mark contacted
+                        </button>
+                      )}
+                      <button className="mbt-iconbtn" onClick={() => deleteInquiry(q.id)}>
                         <Trash2 size={12} /> Remove
                       </button>
                     </div>
@@ -1015,8 +1100,136 @@ function AdminView({ onSignOut }) {
   );
 }
 
+// ---------- Public inquiry form (no login needed — for the bio link) ----------
+const emptyInquiryForm = { name: '', email: '', phone: '', preferredDate: '', service: '', message: '' };
+
+function InquiryForm() {
+  const [form, setForm] = useState(emptyInquiryForm);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [done, setDone] = useState(false);
+
+  async function submit() {
+    setError(null);
+    if (!form.name.trim() || !form.email.trim()) {
+      setError('Please fill in at least your name and email.');
+      return;
+    }
+    setBusy(true);
+
+    const { error: dbError } = await supabase.from('inquiries').insert({
+      name: form.name,
+      email: form.email,
+      phone: form.phone,
+      preferred_date: form.preferredDate || null,
+      service: form.service,
+      message: form.message,
+    });
+
+    const web3formsKey = import.meta.env.VITE_WEB3FORMS_KEY;
+    if (web3formsKey) {
+      try {
+        await fetch('https://api.web3forms.com/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            access_key: web3formsKey,
+            subject: `New booking inquiry from ${form.name}`,
+            from_name: 'Muses by Muz — Booking Portal',
+            name: form.name,
+            email: form.email,
+            phone: form.phone,
+            preferred_date: form.preferredDate,
+            service: form.service,
+            message: form.message,
+          }),
+        });
+      } catch (e) {
+        console.error('Email alert failed', e);
+      }
+    }
+
+    setBusy(false);
+    if (dbError) setError(dbError.message);
+    else setDone(true);
+  }
+
+  if (done) {
+    return (
+      <div className="mbt-app">
+        <style>{STYLE}</style>
+        <div className="mbt-auth-wrap">
+          <div className="mbt-eyebrow" style={{ textAlign: 'center' }}>Booking Portal</div>
+          <div className="mbt-title" style={{ textAlign: 'center', marginBottom: 20 }}>Muses by Muz</div>
+          <div className="mbt-auth-card" style={{ textAlign: 'center' }}>
+            <Sparkles size={20} color="#A85D5D" style={{ marginBottom: 10 }} />
+            <div style={{ fontFamily: 'Newsreader, serif', fontStyle: 'italic', fontSize: 18, marginBottom: 6 }}>Thank you!</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: 'var(--ink-soft)' }}>
+              Your inquiry has been sent. I'll be in touch soon to confirm details.
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mbt-app">
+      <style>{STYLE}</style>
+      <div className="mbt-auth-wrap">
+        <div className="mbt-eyebrow" style={{ textAlign: 'center' }}>Booking Portal</div>
+        <div className="mbt-title" style={{ textAlign: 'center', marginBottom: 20 }}>Muses by Muz</div>
+        <div className="mbt-auth-card">
+          <div className="mbt-form-title">Booking Inquiry</div>
+          {error && <div className="mbt-auth-msg error">{error}</div>}
+          <div className="mbt-field-row">
+            <div className="mbt-field" style={{ width: '100%' }}>
+              <label>Your name</label>
+              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Jane Doe" />
+            </div>
+          </div>
+          <div className="mbt-field-row">
+            <div className="mbt-field" style={{ width: '100%' }}>
+              <label>Email</label>
+              <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="you@example.com" />
+            </div>
+          </div>
+          <div className="mbt-field-row">
+            <div className="mbt-field" style={{ width: '100%' }}>
+              <label>Phone (optional)</label>
+              <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="optional" />
+            </div>
+          </div>
+          <div className="mbt-field-row">
+            <div className="mbt-field">
+              <label>Preferred date</label>
+              <input type="date" value={form.preferredDate} onChange={(e) => setForm({ ...form, preferredDate: e.target.value })} />
+            </div>
+            <div className="mbt-field">
+              <label>Service you're interested in</label>
+              <input value={form.service} onChange={(e) => setForm({ ...form, service: e.target.value })} placeholder="e.g. Bridal Day-Of" />
+            </div>
+          </div>
+          <div className="mbt-field-row">
+            <div className="mbt-field" style={{ width: '100%' }}>
+              <label>Anything else? (event details, location, etc.)</label>
+              <textarea rows={3} value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} placeholder="tell me a bit about your event" />
+            </div>
+          </div>
+          <button className="mbt-btn-primary" style={{ width: '100%' }} disabled={busy} onClick={submit}>
+            {busy ? 'Sending…' : 'Send Inquiry'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---------- Top-level app: auth gate + role routing ----------
 export default function App() {
+  const isInquiryPage = new URLSearchParams(window.location.search).get('inquire') === '1';
+  if (isInquiryPage) return <InquiryForm />;
+
   const [session, setSession] = useState(undefined); // undefined = checking, null = signed out
   const [isAdmin, setIsAdmin] = useState(null); // null = checking
 

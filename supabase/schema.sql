@@ -41,10 +41,25 @@ create table if not exists price_list (
   created_at timestamptz not null default now()
 );
 
+-- Inquiries: submitted by anyone via the public bio-link form, no login required.
+-- Only you can view, update, or delete them.
+create table if not exists inquiries (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  email text,
+  phone text,
+  preferred_date date,
+  service text,
+  message text,
+  status text not null default 'new',
+  created_at timestamptz not null default now()
+);
+
 alter table bookings enable row level security;
 alter table content_ideas enable row level security;
 alter table admins enable row level security;
 alter table price_list enable row level security;
+alter table inquiries enable row level security;
 
 -- Helper: checks if the currently logged-in user's email is in the admins table
 create or replace function is_admin() returns boolean
@@ -90,6 +105,16 @@ create policy "any authenticated user can read prices" on price_list for select 
 create policy "admin insert prices" on price_list for insert with check (is_admin());
 create policy "admin update prices" on price_list for update using (is_admin());
 create policy "admin delete prices" on price_list for delete using (is_admin());
+
+-- Inquiries: anyone (even logged out) can submit one. Only you can read, update, or delete them.
+drop policy if exists "anyone can submit inquiry" on inquiries;
+drop policy if exists "admin read inquiries" on inquiries;
+drop policy if exists "admin update inquiries" on inquiries;
+drop policy if exists "admin delete inquiries" on inquiries;
+create policy "anyone can submit inquiry" on inquiries for insert with check (true);
+create policy "admin read inquiries" on inquiries for select using (is_admin());
+create policy "admin update inquiries" on inquiries for update using (is_admin());
+create policy "admin delete inquiries" on inquiries for delete using (is_admin());
 
 -- LAST STEP (do this after you've created your own login in the app or Supabase dashboard):
 -- insert into admins (email) values ('your-real-email@example.com');
