@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Check, Mail, MessageCircle, Plus, Trash2, Pencil, Sparkles, Copy, CheckCircle2, LogOut, CalendarPlus, Tag } from 'lucide-react';
+import { Check, Mail, MessageCircle, Plus, Trash2, Pencil, Sparkles, Copy, CheckCircle2, LogOut, CalendarPlus, Tag, Image as ImageIcon, Link2, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 const STYLE = `
@@ -389,6 +389,136 @@ const STYLE = `
 .mbt-price-desc { font-family: 'Inter', sans-serif; font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
 .mbt-price-amount { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: var(--rose); white-space: nowrap; }
 .mbt-price-row-admin { display: flex; align-items: center; gap: 10px; }
+
+/* Public inquiry form */
+.mbt-inquiry-wrap { max-width: 560px; margin: 60px auto; }
+.mbt-inquiry-sub {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  color: var(--ink-soft);
+  text-align: center;
+  max-width: 380px;
+  margin: 6px auto 24px;
+  line-height: 1.5;
+}
+.mbt-inquiry-card { padding: 30px 28px; }
+.mbt-inquiry-section {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--rose);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+  margin: 22px 0 14px;
+}
+.mbt-inquiry-section:first-of-type { margin-top: 0; }
+
+/* Inspiration panel */
+.mbt-inspiration-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+  width: 100%;
+}
+.mbt-inspiration-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.mbt-inspiration-item { position: relative; }
+.mbt-inspiration-thumb {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  display: block;
+}
+.mbt-inspiration-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 140px;
+  height: 72px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bone);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--ink-soft);
+  text-decoration: none;
+  overflow: hidden;
+}
+.mbt-inspiration-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mbt-inspiration-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--rose);
+  color: var(--paper);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mbt-inspiration-add { display: flex; gap: 8px; flex-wrap: wrap; }
+.mbt-inspiration-add input {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--bone);
+  color: var(--ink);
+  outline: none;
+  flex: 1;
+  min-width: 160px;
+}
+.mbt-inspiration-add input:focus { border-color: var(--rose); }
+
+/* Inquiry form: add-ons, photo uploads, pricing toggle */
+.mbt-addon-grid { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.mbt-addon-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.mbt-addon-check input { width: 15px; height: 15px; accent-color: var(--rose); cursor: pointer; }
+.mbt-addon-none {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-top: 6px;
+  font-style: italic;
+}
+.mbt-inquiry-pricing-toggle { margin: 16px 0; }
+.mbt-photo-preview {
+  width: 100%;
+  max-width: 220px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  margin-top: 8px;
+  display: block;
+}
+.mbt-photo-preview-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.mbt-photo-preview-small {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+}
 `;
 
 function gcalLink(b) {
@@ -490,21 +620,28 @@ function ClientView({ email, onSignOut }) {
   const [bookings, setBookings] = useState([]);
   const [ideas, setIdeas] = useState([]);
   const [prices, setPrices] = useState([]);
+  const [inspiration, setInspiration] = useState([]);
 
   useEffect(() => {
     (async () => {
       const { data: bData, error: bErr } = await supabase.from('bookings').select('*').order('date', { ascending: true });
       const { data: iData, error: iErr } = await supabase.from('content_ideas').select('*').order('created_at', { ascending: true });
       const { data: pData } = await supabase.from('price_list').select('*').order('sort_order', { ascending: true });
+      const { data: sData } = await supabase.from('booking_inspiration').select('*').order('sort_order', { ascending: true });
       if (bErr || iErr) setError((bErr || iErr).message);
       else {
         setBookings(bData || []);
         setIdeas(iData || []);
         setPrices(pData || []);
+        setInspiration(sData || []);
       }
       setLoading(false);
     })();
   }, []);
+
+  function isImageUrl(url) {
+    return /\.(jpg|jpeg|png|gif|webp|avif)(\?.*)?$/i.test(url);
+  }
 
   return (
     <div className="mbt-app">
@@ -545,6 +682,26 @@ function ClientView({ email, onSignOut }) {
                         {b.service && <span>{b.service}</span>}
                       </div>
                       {b.notes && <div className="mbt-notes">{b.notes}</div>}
+                      {inspiration.filter((s) => s.booking_id === b.id).length > 0 && (
+                        <div className="mbt-inspiration-panel" style={{ borderTop: 'none', paddingTop: 0, marginTop: 8 }}>
+                          <div className="mbt-inspiration-grid">
+                            {inspiration.filter((s) => s.booking_id === b.id).map((s) => (
+                              <div key={s.id} className="mbt-inspiration-item">
+                                {isImageUrl(s.url) ? (
+                                  <a href={s.url} target="_blank" rel="noopener noreferrer">
+                                    <img src={s.url} alt={s.caption || 'inspiration'} className="mbt-inspiration-thumb" />
+                                  </a>
+                                ) : (
+                                  <a href={s.url} target="_blank" rel="noopener noreferrer" className="mbt-inspiration-link">
+                                    <Link2 size={14} />
+                                    <span>{s.caption || s.url.replace(/^https?:\/\//, '').split('/')[0]}</span>
+                                  </a>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -615,6 +772,10 @@ function AdminView({ onSignOut }) {
 
   const [inquiries, setInquiries] = useState([]);
 
+  const [inspiration, setInspiration] = useState([]); // flat list, all bookings
+  const [expandedInspirationId, setExpandedInspirationId] = useState(null);
+  const [inspirationDraft, setInspirationDraft] = useState({ url: '', caption: '' });
+
   useEffect(() => {
     loadAll();
   }, []);
@@ -622,21 +783,48 @@ function AdminView({ onSignOut }) {
   async function loadAll() {
     setLoading(true);
     setLoadError(null);
-    const [bRes, iRes, pRes, qRes] = await Promise.all([
+    const [bRes, iRes, pRes, qRes, sRes] = await Promise.all([
       supabase.from('bookings').select('*').order('date', { ascending: true }),
       supabase.from('content_ideas').select('*').order('created_at', { ascending: true }),
       supabase.from('price_list').select('*').order('sort_order', { ascending: true }),
       supabase.from('inquiries').select('*').order('created_at', { ascending: false }),
+      supabase.from('booking_inspiration').select('*').order('sort_order', { ascending: true }),
     ]);
-    if (bRes.error || iRes.error || pRes.error || qRes.error) {
-      setLoadError((bRes.error || iRes.error || pRes.error || qRes.error).message);
+    if (bRes.error || iRes.error || pRes.error || qRes.error || sRes.error) {
+      setLoadError((bRes.error || iRes.error || pRes.error || qRes.error || sRes.error).message);
     } else {
       setBookings(bRes.data.map(rowToBooking));
       setIdeas(iRes.data.map(rowToIdea));
       setPrices(pRes.data.map(rowToPrice));
       setInquiries(qRes.data.map(rowToInquiry));
+      setInspiration(sRes.data.map(rowToInspiration));
     }
     setLoading(false);
+  }
+
+  function rowToInspiration(r) {
+    return { id: r.id, bookingId: r.booking_id, url: r.url, caption: r.caption || '' };
+  }
+
+  async function addInspiration(bookingId) {
+    if (!inspirationDraft.url.trim()) return;
+    const count = inspiration.filter((s) => s.bookingId === bookingId).length;
+    const { data, error } = await supabase
+      .from('booking_inspiration')
+      .insert({ booking_id: bookingId, url: inspirationDraft.url, caption: inspirationDraft.caption, sort_order: count })
+      .select()
+      .single();
+    if (!error) setInspiration([...inspiration, rowToInspiration(data)]);
+    setInspirationDraft({ url: '', caption: '' });
+  }
+
+  async function deleteInspiration(id) {
+    setInspiration(inspiration.filter((s) => s.id !== id));
+    await supabase.from('booking_inspiration').delete().eq('id', id);
+  }
+
+  function isImageUrl(url) {
+    return /\.(jpg|jpeg|png|gif|webp|avif)(\?.*)?$/i.test(url);
   }
 
   function rowToInquiry(r) {
@@ -645,8 +833,22 @@ function AdminView({ onSignOut }) {
       name: r.name,
       email: r.email || '',
       phone: r.phone || '',
+      eventType: r.event_type || '',
       preferredDate: r.preferred_date || '',
+      readyByTime: r.ready_by_time || '',
+      location: r.location || '',
+      glamLocation: r.glam_location || '',
+      clientAddress: r.client_address || '',
+      guestCount: r.guest_count,
       service: r.service || '',
+      hairService: r.hair_service || '',
+      addons: r.addons || [],
+      budget: r.budget || '',
+      howHeard: r.how_heard || '',
+      socialHandle: r.social_handle || '',
+      bareFacePhotoUrl: r.bare_face_photo_url || '',
+      inspirationUrls: r.inspiration_urls || [],
+      allergies: r.allergies || '',
       message: r.message || '',
       status: r.status || 'new',
     };
@@ -663,14 +865,27 @@ function AdminView({ onSignOut }) {
   }
 
   function useInquiryForBooking(q) {
+    const extraDetails = [
+      q.eventType && `Event: ${q.eventType}`,
+      q.readyByTime && `Ready by: ${q.readyByTime}`,
+      q.glamLocation && `Glam location: ${q.glamLocation}${q.clientAddress ? ` (${q.clientAddress})` : ''}`,
+      q.location && `Location: ${q.location}`,
+      q.guestCount != null && `Guests: ${q.guestCount}`,
+      q.hairService && `Hair: ${q.hairService}`,
+      q.addons && q.addons.length > 0 && `Add-ons: ${q.addons.join(', ')}`,
+      q.budget && `Budget: ${q.budget}`,
+      q.socialHandle && `Social: ${q.socialHandle}`,
+      q.allergies && `Allergies/sensitivities: ${q.allergies}`,
+    ].filter(Boolean).join(' · ');
+    const notes = [extraDetails, q.message].filter(Boolean).join('\n');
     setBookingForm({
       name: q.name,
       email: q.email,
       phone: q.phone,
       date: q.preferredDate,
-      time: '',
+      time: q.readyByTime,
       service: q.service,
-      notes: q.message,
+      notes,
     });
     setEditingBookingId(null);
     setTab('bookings');
@@ -933,7 +1148,54 @@ function AdminView({ onSignOut }) {
                       <button className="mbt-iconbtn" onClick={() => deleteBooking(b.id)}>
                         <Trash2 size={12} /> Remove
                       </button>
+                      <button
+                        className="mbt-iconbtn"
+                        onClick={() => setExpandedInspirationId(expandedInspirationId === b.id ? null : b.id)}
+                      >
+                        <ImageIcon size={12} /> Inspiration
+                        {inspiration.filter((s) => s.bookingId === b.id).length > 0 ? ` (${inspiration.filter((s) => s.bookingId === b.id).length})` : ''}
+                        {expandedInspirationId === b.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                      </button>
                     </div>
+
+                    {expandedInspirationId === b.id && (
+                      <div className="mbt-inspiration-panel">
+                        {inspiration.filter((s) => s.bookingId === b.id).length > 0 && (
+                          <div className="mbt-inspiration-grid">
+                            {inspiration.filter((s) => s.bookingId === b.id).map((s) => (
+                              <div key={s.id} className="mbt-inspiration-item">
+                                {isImageUrl(s.url) ? (
+                                  <a href={s.url} target="_blank" rel="noopener noreferrer">
+                                    <img src={s.url} alt={s.caption || 'inspiration'} className="mbt-inspiration-thumb" />
+                                  </a>
+                                ) : (
+                                  <a href={s.url} target="_blank" rel="noopener noreferrer" className="mbt-inspiration-link">
+                                    <Link2 size={14} />
+                                    <span>{s.caption || s.url.replace(/^https?:\/\//, '').split('/')[0]}</span>
+                                  </a>
+                                )}
+                                <button className="mbt-inspiration-remove" onClick={() => deleteInspiration(s.id)}>
+                                  <Trash2 size={11} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="mbt-inspiration-add">
+                          <input
+                            placeholder="Paste an image or link URL (Pinterest, Instagram, etc.)"
+                            value={inspirationDraft.url}
+                            onChange={(e) => setInspirationDraft({ ...inspirationDraft, url: e.target.value })}
+                          />
+                          <input
+                            placeholder="Caption (optional)"
+                            value={inspirationDraft.caption}
+                            onChange={(e) => setInspirationDraft({ ...inspirationDraft, caption: e.target.value })}
+                          />
+                          <button className="mbt-btn-primary" onClick={() => addInspiration(b.id)}>Add</button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))
@@ -950,12 +1212,47 @@ function AdminView({ onSignOut }) {
                     <div className="mbt-index">{q.status === 'new' ? 'NEW' : q.status.toUpperCase()}</div>
                     <div className="mbt-name">{q.name}</div>
                     <div className="mbt-meta">
+                      {q.eventType && <span>{q.eventType}</span>}
                       {q.preferredDate && <span>{formatDatePretty(q.preferredDate)}</span>}
+                      {q.readyByTime && <span>Ready by {q.readyByTime}</span>}
                       {q.service && <span>{q.service}</span>}
+                      {q.hairService && <span>{q.hairService}</span>}
+                      {q.guestCount != null && <span>{q.guestCount} {q.guestCount === 1 ? 'person' : 'people'}</span>}
+                      {q.budget && <span>Budget: {q.budget}</span>}
+                    </div>
+                    <div className="mbt-meta">
+                      {q.glamLocation && <span>{q.glamLocation}{q.clientAddress ? ` — ${q.clientAddress}` : ''}</span>}
+                      {q.location && <span>{q.location}</span>}
+                    </div>
+                    {q.addons && q.addons.length > 0 && (
+                      <div className="mbt-meta">
+                        <span>Add-ons: {q.addons.join(', ')}</span>
+                      </div>
+                    )}
+                    <div className="mbt-meta">
                       {q.email && <span>{q.email}</span>}
                       {q.phone && <span>{q.phone}</span>}
+                      {q.socialHandle && <span>{q.socialHandle}</span>}
+                      {q.howHeard && <span>via {q.howHeard}</span>}
                     </div>
+                    {q.allergies && <div className="mbt-notes"><strong>Allergies/sensitivities:</strong> {q.allergies}</div>}
                     {q.message && <div className="mbt-notes">{q.message}</div>}
+                    {(q.bareFacePhotoUrl || (q.inspirationUrls && q.inspirationUrls.length > 0)) && (
+                      <div className="mbt-inspiration-panel" style={{ borderTop: 'none', paddingTop: 0 }}>
+                        <div className="mbt-inspiration-grid">
+                          {q.bareFacePhotoUrl && (
+                            <a href={q.bareFacePhotoUrl} target="_blank" rel="noopener noreferrer">
+                              <img src={q.bareFacePhotoUrl} alt="bare face" className="mbt-inspiration-thumb" />
+                            </a>
+                          )}
+                          {(q.inspirationUrls || []).map((url, i) => (
+                            <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                              <img src={url} alt={`inspiration ${i + 1}`} className="mbt-inspiration-thumb" />
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <div className="mbt-actions">
                       <button className="mbt-iconbtn" onClick={() => useInquiryForBooking(q)}>
                         <Plus size={12} /> Use for new booking
@@ -1101,13 +1398,81 @@ function AdminView({ onSignOut }) {
 }
 
 // ---------- Public inquiry form (no login needed — for the bio link) ----------
-const emptyInquiryForm = { name: '', email: '', phone: '', preferredDate: '', service: '', message: '' };
+const emptyInquiryForm = {
+  name: '',
+  email: '',
+  phone: '',
+  eventType: '',
+  preferredDate: '',
+  readyByTime: '',
+  glamLocation: '',
+  clientAddress: '',
+  guestCount: '',
+  service: '',
+  hairService: '',
+  addons: [],
+  budget: '',
+  howHeard: '',
+  socialHandle: '',
+  allergies: '',
+  message: '',
+};
+
+const ADDON_OPTIONS = [
+  'Lashes',
+  'Body Glow (collarbones + shoulders)',
+  'Early Morning Appointment (before 7am)',
+  'Second Look',
+  'Touch Up',
+  'On-Site Travel',
+];
+
+async function uploadInquiryFile(file) {
+  const ext = file.name.split('.').pop();
+  const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const { error } = await supabase.storage.from('inquiry-uploads').upload(path, file);
+  if (error) throw error;
+  const { data } = supabase.storage.from('inquiry-uploads').getPublicUrl(path);
+  return data.publicUrl;
+}
 
 function InquiryForm() {
   const [form, setForm] = useState(emptyInquiryForm);
+  const [bareFacePhoto, setBareFacePhoto] = useState(null);
+  const [bareFacePreview, setBareFacePreview] = useState(null);
+  const [inspirationFiles, setInspirationFiles] = useState([]);
+  const [inspirationPreviews, setInspirationPreviews] = useState([]);
+  const [prices, setPrices] = useState([]);
+  const [showPricing, setShowPricing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    supabase.from('price_list').select('*').order('sort_order', { ascending: true }).then(({ data }) => {
+      if (data) setPrices(data);
+    });
+  }, []);
+
+  function toggleAddon(label) {
+    setForm((f) => ({
+      ...f,
+      addons: f.addons.includes(label) ? f.addons.filter((a) => a !== label) : [...f.addons, label],
+    }));
+  }
+
+  function handleBareFaceChange(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setBareFacePhoto(file);
+    setBareFacePreview(URL.createObjectURL(file));
+  }
+
+  function handleInspirationChange(e) {
+    const files = Array.from(e.target.files || []);
+    setInspirationFiles(files);
+    setInspirationPreviews(files.map((f) => URL.createObjectURL(f)));
+  }
 
   async function submit() {
     setError(null);
@@ -1117,12 +1482,38 @@ function InquiryForm() {
     }
     setBusy(true);
 
+    let bareFaceUrl = null;
+    let inspirationUrls = [];
+    try {
+      if (bareFacePhoto) bareFaceUrl = await uploadInquiryFile(bareFacePhoto);
+      if (inspirationFiles.length) {
+        inspirationUrls = await Promise.all(inspirationFiles.map(uploadInquiryFile));
+      }
+    } catch (uploadErr) {
+      setBusy(false);
+      setError(`Photo upload failed: ${uploadErr.message}`);
+      return;
+    }
+
     const { error: dbError } = await supabase.from('inquiries').insert({
       name: form.name,
       email: form.email,
       phone: form.phone,
+      event_type: form.eventType,
       preferred_date: form.preferredDate || null,
+      ready_by_time: form.readyByTime,
+      glam_location: form.glamLocation,
+      client_address: form.glamLocation === 'Your location' ? form.clientAddress : null,
+      guest_count: form.guestCount ? Number(form.guestCount) : null,
       service: form.service,
+      hair_service: form.hairService,
+      addons: form.addons,
+      budget: form.budget,
+      how_heard: form.howHeard,
+      social_handle: form.socialHandle,
+      bare_face_photo_url: bareFaceUrl,
+      inspiration_urls: inspirationUrls,
+      allergies: form.allergies,
       message: form.message,
     });
 
@@ -1139,8 +1530,21 @@ function InquiryForm() {
             name: form.name,
             email: form.email,
             phone: form.phone,
+            event_type: form.eventType,
             preferred_date: form.preferredDate,
+            ready_by_time: form.readyByTime,
+            glam_location: form.glamLocation,
+            client_address: form.clientAddress,
+            guest_count: form.guestCount,
             service: form.service,
+            hair_service: form.hairService,
+            addons: form.addons.join(', '),
+            budget: form.budget,
+            how_heard: form.howHeard,
+            social_handle: form.socialHandle,
+            allergies: form.allergies,
+            bare_face_photo: bareFaceUrl || 'none uploaded',
+            inspiration_photos: inspirationUrls.join(', ') || 'none uploaded',
             message: form.message,
           }),
         });
@@ -1176,46 +1580,202 @@ function InquiryForm() {
   return (
     <div className="mbt-app">
       <style>{STYLE}</style>
-      <div className="mbt-auth-wrap">
+      <div className="mbt-inquiry-wrap">
         <div className="mbt-eyebrow" style={{ textAlign: 'center' }}>Booking Portal</div>
-        <div className="mbt-title" style={{ textAlign: 'center', marginBottom: 20 }}>Muses by Muz</div>
-        <div className="mbt-auth-card">
-          <div className="mbt-form-title">Booking Inquiry</div>
+        <div className="mbt-title" style={{ textAlign: 'center' }}>Muses by Muz</div>
+        <div className="mbt-inquiry-sub">Tell me a bit about your event and I'll follow up with availability and pricing.</div>
+
+        <div className="mbt-auth-card mbt-inquiry-card">
           {error && <div className="mbt-auth-msg error">{error}</div>}
+
+          <div className="mbt-inquiry-section">About You</div>
           <div className="mbt-field-row">
-            <div className="mbt-field" style={{ width: '100%' }}>
+            <div className="mbt-field">
               <label>Your name</label>
               <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Jane Doe" />
             </div>
-          </div>
-          <div className="mbt-field-row">
-            <div className="mbt-field" style={{ width: '100%' }}>
+            <div className="mbt-field">
               <label>Email</label>
               <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="you@example.com" />
             </div>
           </div>
           <div className="mbt-field-row">
-            <div className="mbt-field" style={{ width: '100%' }}>
+            <div className="mbt-field">
               <label>Phone (optional)</label>
               <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="optional" />
             </div>
+            <div className="mbt-field">
+              <label>Instagram / TikTok (optional)</label>
+              <input value={form.socialHandle} onChange={(e) => setForm({ ...form, socialHandle: e.target.value })} placeholder="@yourhandle" />
+            </div>
+          </div>
+
+          <div className="mbt-inquiry-section">Your Event</div>
+          <div className="mbt-field-row">
+            <div className="mbt-field">
+              <label>Event type</label>
+              <select value={form.eventType} onChange={(e) => setForm({ ...form, eventType: e.target.value })}>
+                <option value="">Select one</option>
+                <option>Wedding</option>
+                <option>Photoshoot</option>
+                <option>Quinceañera</option>
+                <option>Prom / Formal</option>
+                <option>Birthday</option>
+                <option>Editorial / Brand</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div className="mbt-field">
+              <label>Event date</label>
+              <input type="date" value={form.preferredDate} onChange={(e) => setForm({ ...form, preferredDate: e.target.value })} />
+            </div>
           </div>
           <div className="mbt-field-row">
             <div className="mbt-field">
-              <label>Preferred date</label>
-              <input type="date" value={form.preferredDate} onChange={(e) => setForm({ ...form, preferredDate: e.target.value })} />
+              <label>Time you need to be ready by</label>
+              <input type="time" value={form.readyByTime} onChange={(e) => setForm({ ...form, readyByTime: e.target.value })} />
             </div>
             <div className="mbt-field">
-              <label>Service you're interested in</label>
-              <input value={form.service} onChange={(e) => setForm({ ...form, service: e.target.value })} placeholder="e.g. Bridal Day-Of" />
+              <label># of people needing glam</label>
+              <input type="number" min="1" value={form.guestCount} onChange={(e) => setForm({ ...form, guestCount: e.target.value })} placeholder="1" />
             </div>
           </div>
           <div className="mbt-field-row">
             <div className="mbt-field" style={{ width: '100%' }}>
-              <label>Anything else? (event details, location, etc.)</label>
-              <textarea rows={3} value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} placeholder="tell me a bit about your event" />
+              <label>Glam location</label>
+              <select value={form.glamLocation} onChange={(e) => setForm({ ...form, glamLocation: e.target.value })}>
+                <option value="">Select one</option>
+                <option>My studio</option>
+                <option>Your location</option>
+              </select>
             </div>
           </div>
+          {form.glamLocation === 'Your location' && (
+            <div className="mbt-field-row">
+              <div className="mbt-field" style={{ width: '100%' }}>
+                <label>Your address</label>
+                <input value={form.clientAddress} onChange={(e) => setForm({ ...form, clientAddress: e.target.value })} placeholder="Where should I come to?" />
+              </div>
+            </div>
+          )}
+
+          <div className="mbt-inquiry-section">Services</div>
+          <div className="mbt-field-row">
+            <div className="mbt-field">
+              <label>Makeup service requested</label>
+              <select value={form.service} onChange={(e) => setForm({ ...form, service: e.target.value })}>
+                <option value="">Select one</option>
+                <option>Soft Glam</option>
+                <option>Heavy Beat</option>
+                <option>Bridal Trial</option>
+                <option>Bridal Day-Of</option>
+                <option>Makeup Lesson</option>
+              </select>
+            </div>
+            <div className="mbt-field">
+              <label>Hair service</label>
+              <select value={form.hairService} onChange={(e) => setForm({ ...form, hairService: e.target.value })}>
+                <option value="">Select one</option>
+                <option>Hollywood Curls</option>
+                <option>Bouncy Blowout</option>
+                <option>Slick Back Bun</option>
+                <option>No hair needed</option>
+              </select>
+            </div>
+          </div>
+          <div className="mbt-field-row">
+            <div className="mbt-field" style={{ width: '100%' }}>
+              <label>Add-ons (optional)</label>
+              <div className="mbt-addon-grid">
+                {ADDON_OPTIONS.map((opt) => (
+                  <label key={opt} className="mbt-addon-check">
+                    <input type="checkbox" checked={form.addons.includes(opt)} onChange={() => toggleAddon(opt)} />
+                    {opt}
+                  </label>
+                ))}
+              </div>
+              {form.addons.length === 0 && (
+                <div className="mbt-addon-none">No add-ons required</div>
+              )}
+            </div>
+          </div>
+          <div className="mbt-field-row">
+            <div className="mbt-field" style={{ width: '100%' }}>
+              <label>Budget range (optional)</label>
+              <input value={form.budget} onChange={(e) => setForm({ ...form, budget: e.target.value })} placeholder="e.g. $200–300" />
+            </div>
+          </div>
+
+          {prices.length > 0 && (
+            <div className="mbt-inquiry-pricing-toggle">
+              <button type="button" className="mbt-btn-ghost" onClick={() => setShowPricing(!showPricing)} style={{ width: '100%' }}>
+                {showPricing ? 'Hide' : 'View'} Pricing
+              </button>
+              {showPricing && (
+                <div className="mbt-price-list" style={{ marginTop: 10 }}>
+                  {prices.map((p) => (
+                    <div key={p.id} className="mbt-price-row">
+                      <div>
+                        <div className="mbt-price-service">{p.service}</div>
+                        {p.description && <div className="mbt-price-desc">{p.description}</div>}
+                      </div>
+                      {p.price != null && <div className="mbt-price-amount">${Number(p.price).toFixed(0)}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="mbt-inquiry-section">Photos</div>
+          <div className="mbt-field-row">
+            <div className="mbt-field" style={{ width: '100%' }}>
+              <label>Please upload a clear, well-lit photo of your bare face (no makeup, natural daylight if possible)</label>
+              <input type="file" accept="image/*" onChange={handleBareFaceChange} />
+              {bareFacePreview && <img src={bareFacePreview} alt="bare face preview" className="mbt-photo-preview" />}
+            </div>
+          </div>
+          <div className="mbt-field-row">
+            <div className="mbt-field" style={{ width: '100%' }}>
+              <label>Inspiration photos (optional)</label>
+              <input type="file" accept="image/*" multiple onChange={handleInspirationChange} />
+              {inspirationPreviews.length > 0 && (
+                <div className="mbt-photo-preview-grid">
+                  {inspirationPreviews.map((src, i) => (
+                    <img key={i} src={src} alt={`inspiration ${i + 1}`} className="mbt-photo-preview-small" />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="mbt-inquiry-section">Anything Else</div>
+          <div className="mbt-field-row">
+            <div className="mbt-field" style={{ width: '100%' }}>
+              <label>Any allergies or sensitive skin we should know about?</label>
+              <textarea rows={2} value={form.allergies} onChange={(e) => setForm({ ...form, allergies: e.target.value })} placeholder="optional, but helpful to know" />
+            </div>
+          </div>
+          <div className="mbt-field-row">
+            <div className="mbt-field">
+              <label>How'd you hear about me?</label>
+              <select value={form.howHeard} onChange={(e) => setForm({ ...form, howHeard: e.target.value })}>
+                <option value="">Select one</option>
+                <option>Instagram</option>
+                <option>TikTok</option>
+                <option>Referral / word of mouth</option>
+                <option>Google search</option>
+                <option>Other</option>
+              </select>
+            </div>
+          </div>
+          <div className="mbt-field-row">
+            <div className="mbt-field" style={{ width: '100%' }}>
+              <label>Tell me more about your vision</label>
+              <textarea rows={3} value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} placeholder="timing, anything else I should know" />
+            </div>
+          </div>
+
           <button className="mbt-btn-primary" style={{ width: '100%' }} disabled={busy} onClick={submit}>
             {busy ? 'Sending…' : 'Send Inquiry'}
           </button>

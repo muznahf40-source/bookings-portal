@@ -48,10 +48,50 @@ create table if not exists inquiries (
   name text not null,
   email text,
   phone text,
+  event_type text,
   preferred_date date,
+  ready_by_time text,
+  location text,
+  glam_location text,
+  client_address text,
+  guest_count integer,
   service text,
+  hair_service text,
+  addons jsonb,
+  budget text,
+  how_heard text,
+  social_handle text,
+  bare_face_photo_url text,
+  inspiration_urls jsonb,
+  allergies text,
   message text,
   status text not null default 'new',
+  created_at timestamptz not null default now()
+);
+
+-- If you already had the inquiries table from before this update, these add the new columns:
+alter table inquiries add column if not exists event_type text;
+alter table inquiries add column if not exists location text;
+alter table inquiries add column if not exists ready_by_time text;
+alter table inquiries add column if not exists glam_location text;
+alter table inquiries add column if not exists client_address text;
+alter table inquiries add column if not exists hair_service text;
+alter table inquiries add column if not exists addons jsonb;
+alter table inquiries add column if not exists bare_face_photo_url text;
+alter table inquiries add column if not exists inspiration_urls jsonb;
+alter table inquiries add column if not exists allergies text;
+alter table inquiries add column if not exists guest_count integer;
+alter table inquiries add column if not exists budget text;
+alter table inquiries add column if not exists how_heard text;
+alter table inquiries add column if not exists social_handle text;
+
+-- Inspiration images/links attached to a specific booking (mood board style reference).
+create table if not exists booking_inspiration (
+  id uuid primary key default gen_random_uuid(),
+  booking_id uuid not null references bookings(id) on delete cascade,
+  url text not null,
+  caption text,
+  sort_order integer not null default 0,
   created_at timestamptz not null default now()
 );
 
@@ -60,6 +100,7 @@ alter table content_ideas enable row level security;
 alter table admins enable row level security;
 alter table price_list enable row level security;
 alter table inquiries enable row level security;
+alter table booking_inspiration enable row level security;
 
 -- Helper: checks if the currently logged-in user's email is in the admins table
 create or replace function is_admin() returns boolean
@@ -99,6 +140,18 @@ create policy "admin insert ideas" on content_ideas for insert with check (is_ad
 create policy "admin update ideas" on content_ideas for update using (is_admin());
 create policy "admin delete ideas" on content_ideas for delete using (is_admin());
 
+-- Inspiration links/images: clients see only what's attached to their own booking. Only you can add/remove.
+drop policy if exists "read own inspiration or admin" on booking_inspiration;
+drop policy if exists "admin insert inspiration" on booking_inspiration;
+drop policy if exists "admin delete inspiration" on booking_inspiration;
+create policy "read own inspiration or admin" on booking_inspiration for select
+  using (
+    is_admin()
+    or booking_id in (select id from bookings where email = auth.jwt() ->> 'email')
+  );
+create policy "admin insert inspiration" on booking_inspiration for insert with check (is_admin());
+create policy "admin delete inspiration" on booking_inspiration for delete using (is_admin());
+
 -- Price list: anyone logged in (admin or any client) can view it. Only you can change it.
 drop policy if exists "any authenticated user can read prices" on price_list;
 create policy "any authenticated user can read prices" on price_list for select using (auth.uid() is not null);
@@ -115,6 +168,24 @@ create policy "anyone can submit inquiry" on inquiries for insert with check (tr
 create policy "admin read inquiries" on inquiries for select using (is_admin());
 create policy "admin update inquiries" on inquiries for update using (is_admin());
 create policy "admin delete inquiries" on inquiries for delete using (is_admin());
+
+-- Let anyone (even logged out) view your price list on the public inquiry form.
+drop policy if exists "public can read prices" on price_list;
+create policy "public can read prices" on price_list for select using (true);
+
+-- Storage bucket for inquiry photo uploads (bare-face photo + inspiration pics).
+-- Public bucket so photos can be viewed by you in the dashboard; anyone can upload
+-- (needed since the inquiry form has no login), but nobody but you can browse/delete.
+insert into storage.buckets (id, name, public)
+values ('inquiry-uploads', 'inquiry-uploads', true)
+on conflict (id) do nothing;
+
+drop policy if exists "anyone can upload inquiry photos" on storage.objects;
+drop policy if exists "anyone can view inquiry photos" on storage.objects;
+create policy "anyone can upload inquiry photos" on storage.objects
+  for insert with check (bucket_id = 'inquiry-uploads');
+create policy "anyone can view inquiry photos" on storage.objects
+  for select using (bucket_id = 'inquiry-uploads');
 
 -- LAST STEP (do this after you've created your own login in the app or Supabase dashboard):
 -- insert into admins (email) values ('your-real-email@example.com');
