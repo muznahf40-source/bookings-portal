@@ -1645,7 +1645,7 @@ function InquiryForm() {
       preferred_date: form.preferredDate || null,
       ready_by_time: form.readyByTime,
       glam_location: form.glamLocation,
-      client_address: form.glamLocation === 'Your location' ? form.clientAddress : null,
+      client_address: form.glamLocation === 'Muznah comes to me' ? form.clientAddress : null,
       guest_count: form.guestCount ? Number(form.guestCount) : null,
       service: form.service,
       hair_service: form.hairService,
@@ -1784,18 +1784,18 @@ function InquiryForm() {
           </div>
           <div className="mbt-field-row">
             <div className="mbt-field" style={{ width: '100%' }}>
-              <label>Glam location</label>
+              <label>Where should the glam happen?</label>
               <select value={form.glamLocation} onChange={(e) => setForm({ ...form, glamLocation: e.target.value })}>
                 <option value="">Select one</option>
-                <option>My studio</option>
-                <option>Your location</option>
+                <option>I'll come to the studio</option>
+                <option>Muznah comes to me</option>
               </select>
             </div>
           </div>
-          {form.glamLocation === 'Your location' && (
+          {form.glamLocation === 'Muznah comes to me' && (
             <div className="mbt-field-row">
               <div className="mbt-field" style={{ width: '100%' }}>
-                <label>Your address</label>
+                <label>Address where I should come to you</label>
                 <input value={form.clientAddress} onChange={(e) => setForm({ ...form, clientAddress: e.target.value })} placeholder="Where should I come to?" />
               </div>
             </div>
