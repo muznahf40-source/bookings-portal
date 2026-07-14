@@ -519,6 +519,58 @@ const STYLE = `
   border-radius: 4px;
   border: 1px solid var(--line);
 }
+
+/* Public homepage */
+.mbt-home-wrap { max-width: 720px; margin: 0 auto; padding: 20px 4px 40px; }
+.mbt-home-hero { text-align: center; padding: 40px 0 30px; }
+.mbt-home-title { font-size: 44px; margin: 6px 0 8px; }
+.mbt-home-cta {
+  display: inline-block;
+  text-decoration: none;
+  padding: 12px 28px;
+  width: auto;
+}
+.mbt-home-section { margin: 36px 0; }
+.mbt-home-about {
+  font-family: 'Inter', sans-serif;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--ink);
+  max-width: 560px;
+  margin: 14px auto 0;
+  text-align: center;
+  white-space: pre-wrap;
+}
+.mbt-portfolio-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+.mbt-portfolio-item {
+  display: block;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+}
+.mbt-portfolio-item img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.2s ease; }
+.mbt-portfolio-item:hover img { transform: scale(1.05); }
+.mbt-home-footer {
+  text-align: center;
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.mbt-home-footer a {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  text-decoration: none;
+}
+.mbt-home-footer a:hover { color: var(--rose); }
 `;
 
 function gcalLink(b) {
@@ -776,9 +828,63 @@ function AdminView({ onSignOut }) {
   const [expandedInspirationId, setExpandedInspirationId] = useState(null);
   const [inspirationDraft, setInspirationDraft] = useState({ url: '', caption: '' });
 
+  const [aboutDraft, setAboutDraft] = useState('');
+  const [aboutSaved, setAboutSaved] = useState(false);
+  const [portfolio, setPortfolio] = useState([]);
+  const [uploadingPortfolio, setUploadingPortfolio] = useState(false);
+
   useEffect(() => {
     loadAll();
   }, []);
+
+  async function loadWebsiteContent() {
+    const [{ data: aboutData }, { data: pData }] = await Promise.all([
+      supabase.from('site_content').select('*').eq('id', 'about').maybeSingle(),
+      supabase.from('portfolio_images').select('*').order('sort_order', { ascending: true }),
+    ]);
+    setAboutDraft(aboutData ? aboutData.content : '');
+    setPortfolio(pData || []);
+  }
+
+  useEffect(() => {
+    loadWebsiteContent();
+  }, []);
+
+  async function saveAbout() {
+    await supabase.from('site_content').upsert({ id: 'about', content: aboutDraft, updated_at: new Date().toISOString() });
+    setAboutSaved(true);
+    setTimeout(() => setAboutSaved(false), 1800);
+  }
+
+  async function handlePortfolioUpload(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setUploadingPortfolio(true);
+    for (const file of files) {
+      try {
+        const ext = file.name.split('.').pop();
+        const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const { error: upErr } = await supabase.storage.from('portfolio-uploads').upload(path, file);
+        if (upErr) throw upErr;
+        const { data } = supabase.storage.from('portfolio-uploads').getPublicUrl(path);
+        const { data: row, error: insErr } = await supabase
+          .from('portfolio_images')
+          .insert({ url: data.publicUrl, sort_order: portfolio.length })
+          .select()
+          .single();
+        if (!insErr) setPortfolio((prev) => [...prev, row]);
+      } catch (err) {
+        console.error('Portfolio upload failed', err);
+      }
+    }
+    setUploadingPortfolio(false);
+    e.target.value = '';
+  }
+
+  async function deletePortfolioImage(id) {
+    setPortfolio(portfolio.filter((p) => p.id !== id));
+    await supabase.from('portfolio_images').delete().eq('id', id);
+  }
 
   async function loadAll() {
     setLoading(true);
@@ -1044,6 +1150,7 @@ function AdminView({ onSignOut }) {
           </button>
           <button className={`mbt-tab ${tab === 'ideas' ? 'active' : ''}`} onClick={() => setTab('ideas')}>Content Ideas</button>
           <button className={`mbt-tab ${tab === 'pricing' ? 'active' : ''}`} onClick={() => setTab('pricing')}>Pricing</button>
+          <button className={`mbt-tab ${tab === 'website' ? 'active' : ''}`} onClick={() => setTab('website')}>Website</button>
         </div>
 
         {loading ? (
@@ -1337,7 +1444,7 @@ function AdminView({ onSignOut }) {
               </div>
             )}
           </div>
-        ) : (
+        ) : tab === 'pricing' ? (
           <div>
             {!showPriceForm && (
               <button className="mbt-addbtn" onClick={openNewPriceForm} style={{ marginBottom: 18 }}>
@@ -1386,6 +1493,41 @@ function AdminView({ onSignOut }) {
                       <button className="mbt-trash" onClick={() => openEditPriceForm(p)}><Pencil size={14} /></button>
                       <button className="mbt-trash" onClick={() => deletePrice(p.id)}><Trash2 size={14} /></button>
                     </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div>
+            <div className="mbt-form-title" style={{ marginBottom: 10 }}>About Me (shown on your public homepage)</div>
+            <div className="mbt-form">
+              <textarea
+                rows={6}
+                style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, padding: 10, border: '1px solid var(--line)', borderRadius: 3, background: 'var(--bone)', color: 'var(--ink)' }}
+                value={aboutDraft}
+                onChange={(e) => setAboutDraft(e.target.value)}
+                placeholder="Tell potential clients a bit about yourself, your style, and your experience..."
+              />
+              <div className="mbt-form-actions" style={{ marginTop: 10 }}>
+                <button className="mbt-btn-primary" onClick={saveAbout}>{aboutSaved ? 'Saved!' : 'Save About Me'}</button>
+              </div>
+            </div>
+
+            <div className="mbt-form-title" style={{ margin: '24px 0 10px' }}>Portfolio Photos (shown on your public homepage)</div>
+            <div className="mbt-form">
+              <input type="file" accept="image/*" multiple onChange={handlePortfolioUpload} disabled={uploadingPortfolio} />
+              {uploadingPortfolio && <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'var(--ink-soft)', marginTop: 8 }}>Uploading…</div>}
+            </div>
+
+            {portfolio.length === 0 ? (
+              <div className="mbt-empty">No portfolio photos yet — add some above to show off your work.</div>
+            ) : (
+              <div className="mbt-portfolio-grid" style={{ marginTop: 14 }}>
+                {portfolio.map((p) => (
+                  <div key={p.id} className="mbt-portfolio-item" style={{ position: 'relative' }}>
+                    <img src={p.url} alt={p.caption || 'portfolio'} />
+                    <button className="mbt-inspiration-remove" onClick={() => deletePortfolioImage(p.id)}><Trash2 size={11} /></button>
                   </div>
                 ))}
               </div>
@@ -1785,10 +1927,72 @@ function InquiryForm() {
   );
 }
 
+// ---------- Public homepage (About + Portfolio + booking link) ----------
+function HomePage() {
+  const [about, setAbout] = useState('');
+  const [portfolio, setPortfolio] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const [{ data: aboutData }, { data: pData }] = await Promise.all([
+        supabase.from('site_content').select('*').eq('id', 'about').maybeSingle(),
+        supabase.from('portfolio_images').select('*').order('sort_order', { ascending: true }),
+      ]);
+      setAbout(aboutData ? aboutData.content : '');
+      setPortfolio(pData || []);
+      setLoading(false);
+    })();
+  }, []);
+
+  return (
+    <div className="mbt-app">
+      <style>{STYLE}</style>
+      <div className="mbt-home-wrap">
+        <div className="mbt-home-hero">
+          <div className="mbt-eyebrow" style={{ textAlign: 'center' }}>Houston, TX</div>
+          <div className="mbt-title mbt-home-title">Muses by Muz</div>
+          <div className="mbt-inquiry-sub" style={{ margin: '6px auto 22px' }}>
+            Makeup & hair artistry for weddings, editorial shoots, and every occasion in between.
+          </div>
+          <a className="mbt-btn-primary mbt-home-cta" href="/?inquire=1">Book Now</a>
+        </div>
+
+        {!loading && about && (
+          <div className="mbt-home-section">
+            <div className="mbt-inquiry-section" style={{ textAlign: 'center' }}>About Me</div>
+            <div className="mbt-home-about">{about}</div>
+          </div>
+        )}
+
+        {!loading && portfolio.length > 0 && (
+          <div className="mbt-home-section">
+            <div className="mbt-inquiry-section" style={{ textAlign: 'center' }}>Portfolio</div>
+            <div className="mbt-portfolio-grid">
+              {portfolio.map((p) => (
+                <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer" className="mbt-portfolio-item">
+                  <img src={p.url} alt={p.caption || 'portfolio'} />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="mbt-home-footer">
+          <a href="/?portal=1">Client &amp; Admin Portal</a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---------- Top-level app: auth gate + role routing ----------
 export default function App() {
-  const isInquiryPage = new URLSearchParams(window.location.search).get('inquire') === '1';
+  const params = new URLSearchParams(window.location.search);
+  const isInquiryPage = params.get('inquire') === '1';
+  const isPortalPage = params.get('portal') === '1';
   if (isInquiryPage) return <InquiryForm />;
+  if (!isPortalPage) return <HomePage />;
 
   const [session, setSession] = useState(undefined); // undefined = checking, null = signed out
   const [isAdmin, setIsAdmin] = useState(null); // null = checking

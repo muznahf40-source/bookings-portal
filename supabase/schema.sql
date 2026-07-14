@@ -187,5 +187,47 @@ create policy "anyone can upload inquiry photos" on storage.objects
 create policy "anyone can view inquiry photos" on storage.objects
   for select using (bucket_id = 'inquiry-uploads');
 
+-- Public website content: your About Me text, editable from the admin dashboard.
+create table if not exists site_content (
+  id text primary key,
+  content text,
+  updated_at timestamptz not null default now()
+);
+alter table site_content enable row level security;
+drop policy if exists "public can read site content" on site_content;
+drop policy if exists "admin can insert site content" on site_content;
+drop policy if exists "admin can update site content" on site_content;
+create policy "public can read site content" on site_content for select using (true);
+create policy "admin can insert site content" on site_content for insert with check (is_admin());
+create policy "admin can update site content" on site_content for update using (is_admin());
+
+-- Portfolio images shown on your public homepage.
+create table if not exists portfolio_images (
+  id uuid primary key default gen_random_uuid(),
+  url text not null,
+  caption text,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+alter table portfolio_images enable row level security;
+drop policy if exists "public can read portfolio" on portfolio_images;
+drop policy if exists "admin can insert portfolio" on portfolio_images;
+drop policy if exists "admin can delete portfolio" on portfolio_images;
+create policy "public can read portfolio" on portfolio_images for select using (true);
+create policy "admin can insert portfolio" on portfolio_images for insert with check (is_admin());
+create policy "admin can delete portfolio" on portfolio_images for delete using (is_admin());
+
+-- Storage bucket for portfolio photos. Public to view; only you (admin) can upload.
+insert into storage.buckets (id, name, public)
+values ('portfolio-uploads', 'portfolio-uploads', true)
+on conflict (id) do nothing;
+
+drop policy if exists "admin can upload portfolio photos" on storage.objects;
+drop policy if exists "public can view portfolio photos" on storage.objects;
+create policy "admin can upload portfolio photos" on storage.objects
+  for insert with check (bucket_id = 'portfolio-uploads' and is_admin());
+create policy "public can view portfolio photos" on storage.objects
+  for select using (bucket_id = 'portfolio-uploads');
+
 -- LAST STEP (do this after you've created your own login in the app or Supabase dashboard):
 -- insert into admins (email) values ('your-real-email@example.com');
